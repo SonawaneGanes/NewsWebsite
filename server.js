@@ -1,8 +1,9 @@
-const express = require('express');
+ const express = require('express');
 const mongoose = require('mongoose');
 const path = require('path');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const bcrypt = require('bcryptjs'); // For password hashing
 
 const app = express();
 const port = 5500;
@@ -11,17 +12,16 @@ const port = 5500;
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.json());
-app.use(express.static(__dirname)); // Serves static files (HTML, CSS, JS)
+app.use(express.static(path.join(__dirname, 'public'))); // Serve static files from "public" directory
 
 // MongoDB Connection
-mongoose.connect('mongodb://127.0.0.1:27017/Student', {
+mongoose.connect('mongodb://localhost:27017/NEWS', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-});
+}).then(() => console.log(' MongoDB connected successfully'))
+  .catch(err => console.error(' MongoDB connection error:', err));
 
 const db = mongoose.connection;
-db.on('error', (err) => console.error(' MongoDB connection error:', err));
-db.once('open', () => console.log(' MongoDB connected successfully'));
 
 // User Schema
 const userSchema = new mongoose.Schema({
@@ -37,7 +37,7 @@ const User = mongoose.model('User', userSchema);
 
 // Serve Signup Page
 app.get('/signup', (req, res) => {
-  res.sendFile(path.join(__dirname, 'signup.html'));
+  res.sendFile(path.join(__dirname, 'public', 'signup.html'));
 });
 
 // Handle Signup Request
@@ -46,28 +46,30 @@ app.post('/signup', async (req, res) => {
     const { name, phone, email, state, city, password } = req.body;
 
     if (!name || !phone || !email || !state || !city || !password) {
-      return res.status(400).send(' All fields are required.');
+      return res.status(400).send('All fields are required.');
     }
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).send(' User with this email already exists.');
+      return res.status(400).send('User with this email already exists.');
     }
 
-    const newUser = new User({ name, phone, email, state, city, password });
+    const hashedPassword = await bcrypt.hash(password, 10); // Hash password
+
+    const newUser = new User({ name, phone, email, state, city, password: hashedPassword });
     await newUser.save();
 
-    console.log(' User signed up successfully');
-    res.send(' Signup successful!');
+    console.log('User signed up successfully');
+    res.send('Signup successful!');
   } catch (err) {
-    console.error(' Signup error:', err);
-    res.status(500).send(' An error occurred during signup.');
+    console.error('Signup error:', err);
+    res.status(500).send('An error occurred during signup.');
   }
 });
 
 // Serve Signin Page
 app.get('/signin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'signin.html'));
+  res.sendFile(path.join(__dirname, 'public', 'signin.html'));
 });
 
 // Handle Signin Request
@@ -81,22 +83,23 @@ app.post('/signin', async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).send(' User not found. Please sign up first.');
+      return res.status(400).send('User not found. Please sign up first.');
     }
 
-    if (user.password !== password) {
-      return res.status(401).send(' Incorrect password.');
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).send('Incorrect password.');
     }
 
-    console.log(' User signed in successfully');
-    res.send(' Sign-in successful!');
+    console.log('User signed in successfully');
+    res.send('Sign-in successful!');
   } catch (err) {
-    console.error(' Sign-in error:', err);
-    res.status(500).send(' An error occurred during sign-in.');
+    console.error('Sign-in error:', err);
+    res.status(500).send('An error occurred during sign-in.');
   }
 });
 
 // Start Server
 app.listen(port, () => {
-  console.log(` Server started on http://localhost:${port}`);
+  console.log(`Server started on http://localhost:${port}`);
 });
